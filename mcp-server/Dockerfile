@@ -47,9 +47,17 @@ ENV NODE_ENV=production \
     MCP_PORT=3105
 
 # curl needed for HEALTHCHECK
+#
+# uid/gid 1001 e nao 1000: a imagem `node:22-alpine` ja traz o usuario `node`
+# em 1000, e `addgroup -g 1000` falha com "gid '1000' in use" — o build inteiro
+# morre nessa linha. Provavelmente 1000 estava livre quando isto foi escrito; a
+# tag `22-alpine` anda, e essa e a diferenca.
+#
+# O numero em si nao importa aqui: nao ha volume com dono fixo, e o que a linha
+# existe para garantir e so nao rodar como root.
 RUN apk add --no-cache curl \
-    && addgroup -S sankhya -g 1000 \
-    && adduser -S sankhya -G sankhya -u 1000
+    && addgroup -S sankhya -g 1001 \
+    && adduser -S sankhya -G sankhya -u 1001
 
 WORKDIR /app
 

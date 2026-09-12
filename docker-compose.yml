@@ -33,6 +33,11 @@ services:
       # initdb runs these in name order, ONCE, on an empty data dir. The help
       # schema (01) creates the shared text-search config the community schema
       # (02) guards against; both are idempotent and safe to reapply by hand.
+      #
+      # As extensoes (00) precisam vir antes: `schema.sql` usa `unaccent` na
+      # primeira instrucao, e no caminho do Docker o `scripts/setup_db.sh` —
+      # que e quem as cria no caminho manual — nunca roda.
+      - ./sql/extensions.sql:/docker-entrypoint-initdb.d/00-extensions.sql:ro
       - ./sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
       - ./sql/community_schema.sql:/docker-entrypoint-initdb.d/02-community-schema.sql:ro
     ports:
