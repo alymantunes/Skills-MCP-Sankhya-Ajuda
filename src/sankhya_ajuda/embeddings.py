@@ -8,6 +8,7 @@ exponential backoff, and dimension checks.
 from __future__ import annotations
 
 import asyncio
+import os
 import secrets
 from collections.abc import Sequence
 
@@ -35,11 +36,40 @@ class EmbeddingError(RuntimeError):
     """Raised when the embedding endpoint fails permanently."""
 
 
-class EmbeddingTooLongError(EmbeddingError):
+class EmbeddingSkipped(EmbeddingError):
+    """Nao ha vetor para este texto, e isso NAO e motivo para abortar.
+
+    O registro segue para o Postgres com ``embedding = NULL`` e o corpo
+    inteiro preservado, que e o que a busca FTS consome. Existe como classe
+    intermediaria para que os dois indexadores distingam "pulei este vetor" de
+    "o servico de embedding caiu" — o primeiro e rotina, o segundo precisa
+    parar a carga antes de gravar meio indice.
+    """
+
+
+class EmbeddingTooLongError(EmbeddingSkipped):
     """Input exceeds the model context length even after truncation.
 
     Distinct from generic ``EmbeddingError`` so callers can choose to skip the
     offending record rather than aborting an entire batch.
+    """
+
+
+class EmbeddingsDisabledError(EmbeddingSkipped):
+    """Esta instalacao roda sem embeddings (``EMBEDDING_PROVIDER=none``).
+
+    O servidor MCP ja tratava esse modo — ele forca toda busca para
+    ``mode=keyword`` —, mas o ETL nao: ele chamava o embedding de qualquer
+    jeito e tratava a falha como fatal. Com ``VLLM_BASE_URL`` vazia, a carga
+    morria no primeiro artigo com
+
+        Request URL is missing an 'http://' or 'https://' protocol
+
+    deixando o indice com as categorias e as secoes e NENHUM artigo — que e o
+    estado mais caro de diagnosticar, porque o MCP responde e nao acha nada.
+
+    O Cenario #5 do README ("FTS only, zero cost") depende desta classe: sem
+    ela, ele so existia na documentacao.
     """
 
 
@@ -51,6 +81,25 @@ class EmbeddingClient:
 
     def __init__(self, settings: VllmSettings | None = None) -> None:
         self._cfg = settings or get_settings().vllm
+
+        # Mesma variavel e mesmos valores que o servidor MCP le
+        # (`embeddingProvider: z.enum(['vllm', 'openai', 'none'])` em
+        # mcp-server/src/config.ts), e o mesmo padrao `vllm`, para as duas
+        # metades da instalacao nunca discordarem sobre se ha embedding.
+        #
+        # A URL vazia tambem desliga: `VllmSettings.base_url` ja documenta que
+        # "callers should validate presence before invoking the embedding
+        # client", e ate aqui nenhum chamador validava.
+        provedor = os.getenv("EMBEDDING_PROVIDER", "vllm").strip().lower()
+        self.enabled = provedor != "none" and bool(self._cfg.base_url.strip())
+        if not self.enabled:
+            log.info(
+                "embeddings.disabled",
+                provider=provedor,
+                base_url_set=bool(self._cfg.base_url.strip()),
+                effect="artigos indexados so para busca textual (FTS)",
+            )
+
         headers: dict[str, str] = {"Content-Type": "application/json"}
         api_key = self._cfg.api_key.get_secret_value()
         if api_key:
@@ -78,6 +127,11 @@ class EmbeddingClient:
     async def embed_batch(self, texts: Sequence[str]) -> list[list[float]]:
         if not texts:
             return []
+        if not self.enabled:
+            raise EmbeddingsDisabledError(
+                "EMBEDDING_PROVIDER=none (ou VLLM_BASE_URL vazia): "
+                "o texto e indexado para busca textual, sem vetor."
+            )
         truncated_inputs = [self._truncate(t) for t in texts]
         payload = {"model": self._cfg.model, "input": truncated_inputs}
         last_error: Exception | None = None

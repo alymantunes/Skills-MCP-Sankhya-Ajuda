@@ -21,7 +21,12 @@ import structlog
 
 from sankhya_ajuda import db
 from sankhya_ajuda.config import get_settings
-from sankhya_ajuda.embeddings import EmbeddingClient, EmbeddingError, EmbeddingTooLongError
+from sankhya_ajuda.embeddings import (
+    EmbeddingClient,
+    EmbeddingError,
+    EmbeddingsDisabledError,
+    EmbeddingSkipped,
+)
 
 from . import parser as html_parser
 from .zendesk import ZendeskClient
@@ -259,12 +264,18 @@ class SyncRunner:
 
             try:
                 vector = await emb.embed(body_text)
-            except EmbeddingTooLongError as exc:
-                # Article body cannot fit in the embedding context even after
-                # truncation. Skip the embedding but still keep the article
-                # text in PostgreSQL so FTS can find it.
+            except EmbeddingSkipped as exc:
+                # Sem vetor para este artigo. O corpo inteiro vai para o
+                # Postgres do mesmo jeito, que e o que a busca FTS consome.
+                #
+                # Dois motivos chegam aqui e o log precisa separa-los: um
+                # artigo grande demais para o contexto do modelo e uma
+                # EXCECAO, e vale investigar; a instalacao inteira rodando sem
+                # embedding e o NORMAL do Cenario #5, e 7.730 avisos de
+                # "embed_too_long" fariam parecer que a base e toda gigante.
+                desligado = isinstance(exc, EmbeddingsDisabledError)
                 log.warning(
-                    "sync.embed_too_long",
+                    "sync.embed_disabled" if desligado else "sync.embed_too_long",
                     article_id=art["id"],
                     body_len=len(body_text),
                     error=str(exc)[:200],

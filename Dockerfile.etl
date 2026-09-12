@@ -27,8 +27,22 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # Cache the dependency layer (only invalidated when pyproject.toml changes)
+#
+# O `mkdir src` nao e enfeite. `pip install -e .` e instalacao EDITAVEL, e
+# editavel exige a arvore de codigo para gerar os metadados — mas aqui so o
+# `pyproject.toml` foi copiado, de proposito, para a camada de dependencias nao
+# ser invalidada a cada mudanca de codigo. Com `package-dir = {"" = "src"}` e
+# nenhum `src/`, o setuptools recusa:
+#
+#     error: error in 'egg_base' option: 'src' does not exist or is not a directory
+#
+# Versoes mais antigas toleravam e seguiam; as atuais nao. Um diretorio vazio
+# satisfaz o egg_info, as dependencias sao instaladas e ficam em cache, e o
+# `COPY src/` logo abaixo traz o codigo de verdade para o segundo
+# `pip install -e .`, que e o que de fato registra o pacote.
 COPY pyproject.toml ./
-RUN python -m venv /opt/venv \
+RUN mkdir -p src \
+    && python -m venv /opt/venv \
     && /opt/venv/bin/pip install --upgrade pip \
     && /opt/venv/bin/pip install -e .
 
@@ -52,7 +66,25 @@ LABEL org.opencontainers.image.title="sankhya-ajuda-etl" \
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PATH="/opt/venv/bin:$PATH"
+    PATH="/opt/venv/bin:$PATH" \
+    # Sem isto, `sankhya-sync` morre em `ModuleNotFoundError: No module named
+    # 'sync'` — e `sankhya_ajuda` cairia logo em seguida, pelo mesmo motivo.
+    #
+    # Dois desencontros entre o layout do projeto e o do Dockerfile:
+    #
+    # 1. `sync/` mora na RAIZ, fora de `src/`, e o setuptools so empacota
+    #    `where = ["src"]`. Entao `sync` nunca e instalado — os entry points
+    #    `sankhya-sync` e `sankhya-community-sync` apontam para um pacote que
+    #    so existe como diretorio. No caminho manual isso passa despercebido,
+    #    porque `python -m sync.sync` rodado da raiz poe o CWD no sys.path; um
+    #    console script nao poe.
+    # 2. O `pip install -e .` do builder grava um .pth apontando para
+    #    `/build/src`, que e caminho DO BUILDER. Na imagem final o codigo esta
+    #    em `/app/src`, e `/build` nao existe.
+    #
+    # Os dois caminhos explicitos resolvem os dois, e mantem `python -m` e os
+    # console scripts funcionando igual.
+    PYTHONPATH="/app:/app/src"
 
 # Runtime-only deps (libpq for psycopg; build-essential is NOT needed at runtime)
 RUN apt-get update \

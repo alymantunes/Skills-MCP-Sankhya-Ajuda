@@ -69,6 +69,12 @@ services:
       PG_DB:             ${PG_DATABASE:-sankhya_ajuda}
       PG_USER:           ${PG_USER:-sankhya_ajuda}
       PG_PASSWORD:       ${PG_PASSWORD}
+      # Precisa chegar aqui tambem, e nao so ao mcp-server. Sem esta linha o
+      # ETL nao sabia que a instalacao roda sem embeddings: ele chamava o vLLM
+      # de qualquer jeito, com `VLLM_BASE_URL` vazia, e a carga morria no
+      # primeiro artigo — deixando categorias e secoes indexadas e NENHUM
+      # artigo. O Cenario #5 do README nao completava por causa disto.
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-vllm}
       VLLM_BASE_URL:     ${VLLM_BASE_URL:-}
       VLLM_API_KEY:      ${VLLM_API_KEY:-}
       VLLM_MODEL:        ${VLLM_MODEL:-/model}

@@ -21,7 +21,7 @@ import structlog
 # Pure HTML helpers shared with the help-center ETL — reused, not reimplemented.
 from sync import parser as html_parser
 
-from .embeddings import EmbeddingError, EmbeddingTooLongError
+from .embeddings import EmbeddingError, EmbeddingsDisabledError, EmbeddingSkipped
 from .sources.base import Document, Repository
 
 log = structlog.get_logger(__name__)
@@ -76,11 +76,18 @@ class DocumentIndexer:
 
         try:
             vector = await self._embedder.embed(body_text)
-        except EmbeddingTooLongError as exc:
-            # Body cannot fit the embedding context even after truncation. Keep
-            # the text in PostgreSQL so FTS still finds it; skip the vector.
+        except EmbeddingSkipped as exc:
+            # Sem vetor para este documento. O corpo inteiro vai para o Postgres
+            # do mesmo jeito, que e o que a busca FTS consome.
+            #
+            # Os dois motivos sao separados no log de proposito: um documento
+            # grande demais para o contexto do modelo e EXCECAO e vale
+            # investigar; a instalacao rodando sem embedding e o NORMAL do
+            # Cenario #5, e milhares de avisos de "embed_too_long" fariam
+            # parecer que a base inteira e gigante.
+            desligado = isinstance(exc, EmbeddingsDisabledError)
             log.warning(
-                "indexer.embed_too_long",
+                "indexer.embed_disabled" if desligado else "indexer.embed_too_long",
                 source=doc.source,
                 external_id=doc.external_id,
                 body_len=len(body_text),
