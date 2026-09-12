@@ -100,9 +100,16 @@ export function formatArticleDetail(input: ArticleDetailInput): string {
   if (article.body_text.trim().length === 0) {
     content = '_(artigo sem conteudo de corpo)_';
   } else if (article.body_text_truncated) {
+    // A mensagem diz COMO continuar, e nao so que faltou.
+    //
+    // Antes mandava aumentar max_body_chars — conselho que nao resolve quando o
+    // artigo tem 255 mil chars e o teto por resposta e 40 mil. O agente lia
+    // isso, tentava o maximo, continuava sem a parte que queria e desistia
+    // dizendo que nao deu para abrir. Com o offset do proximo trecho na propria
+    // resposta, ele continua a leitura sozinho.
     content =
       article.body_text +
-      `\n\n_... (truncado em ${maxBodyChars} chars de ${article.body_text_full_chars} totais; aumente max_body_chars para ver mais)_`;
+      `\n\n_... (trecho de ${article.body_text_offset} a ${article.body_text_next_offset} de ${article.body_text_full_chars} chars, ${maxBodyChars} por resposta. Para continuar, chame de novo com body_offset=${article.body_text_next_offset})_`;
   } else {
     content = article.body_text;
   }

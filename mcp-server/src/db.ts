@@ -280,6 +280,7 @@ export async function getArticleFull(
   pool: Pool,
   articleId: number,
   maxBodyChars: number,
+  bodyOffset = 0,
 ): Promise<ArticleFull | null> {
   const sql = `
     SELECT a.id, a.section_id, a.title, ab.path AS breadcrumb,
@@ -313,9 +314,19 @@ export async function getArticleFull(
   const row = result.rows[0];
   if (!row) return null;
 
+  // Fatia a partir de body_offset, e nao sempre do inicio do artigo.
+  //
+  // O manual de Tipos de Operacao tem ~255 mil chars e o teto por resposta e de
+  // 40 mil: sem offset, tudo depois do primeiro trecho era inalcancavel. O
+  // especialista Fiscal bateu nisso de verdade — o indice mostrava a aba
+  // Estoque, o texto dela ficava alem do corte, e a resposta saiu dizendo que
+  // nao deu para abrir. Ler em trechos e melhor que subir o teto: cada resposta
+  // continua cabendo no contexto, e o agente pede so a parte que falta.
   const fullChars = row.body_text.length;
-  const truncated = fullChars > maxBodyChars;
-  const body = truncated ? row.body_text.slice(0, maxBodyChars) : row.body_text;
+  const inicio = Math.min(Math.max(bodyOffset, 0), fullChars);
+  const fim = Math.min(inicio + maxBodyChars, fullChars);
+  const body = row.body_text.slice(inicio, fim);
+  const truncated = fim < fullChars;
 
   return {
     id: Number(row.id),
@@ -325,6 +336,8 @@ export async function getArticleFull(
     body_text: body,
     body_text_truncated: truncated,
     body_text_full_chars: fullChars,
+    body_text_offset: inicio,
+    body_text_next_offset: truncated ? fim : null,
     html_url: row.html_url,
     label_names: row.label_names ?? [],
     outdated: row.outdated,

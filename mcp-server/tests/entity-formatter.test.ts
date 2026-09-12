@@ -134,18 +134,39 @@ describe('formatArticleDetail', () => {
     expect(md).toContain('| Obsoleto | sim |');
   });
 
-  it('appends truncation marker when body is truncated', () => {
+  it('diz COMO continuar quando o corpo veio em trecho', () => {
+    // Antes a mensagem mandava aumentar max_body_chars — conselho que nao
+    // resolve num artigo de 255 mil chars com teto de 40 mil por resposta. O
+    // agente tentava o maximo, continuava sem a parte que queria e desistia.
     const md = formatArticleDetail({
       article: {
         ...ARTICLE,
         body_text: 'cortado',
         body_text_truncated: true,
         body_text_full_chars: 50000,
+        body_text_offset: 0,
+        body_text_next_offset: 100,
       },
       maxBodyChars: 100,
     });
-    expect(md).toContain('truncado em 100 chars');
+    expect(md).toContain('trecho de 0 a 100');
     expect(md).toContain('50000');
+    expect(md).toContain('body_offset=100');
+  });
+
+  it('nao promete continuacao quando o artigo acabou', () => {
+    const md = formatArticleDetail({
+      article: {
+        ...ARTICLE,
+        body_text: 'inteiro',
+        body_text_truncated: false,
+        body_text_full_chars: 7,
+        body_text_offset: 0,
+        body_text_next_offset: null,
+      },
+      maxBodyChars: 100,
+    });
+    expect(md).not.toContain('body_offset=');
   });
 });
 

@@ -66,9 +66,23 @@ mais metadados: hierarquia de breadcrumb, autor, tags, datas, flag de obsolescê
 | Parâmetro | Tipo | Obrigatório | Default | Descrição |
 |-----------|------|-------------|---------|-----------|
 | `article_id` | integer | Sim | — | ID BIGINT do artigo no Zendesk |
-| `max_body_chars` | integer (100-40000) | Não | 8000 | Limite de caracteres do corpo |
+| `max_body_chars` | integer (100-40000) | Não | 8000 | Limite de caracteres do corpo, por trecho |
+| `body_offset` | integer (>= 0) | Não | 0 | De onde começar a ler o corpo, em caracteres |
 
-**Retorna:** visão de detalhe em Markdown com corpo completo e metadados. Aviso de truncamento é anexado quando o corpo excede `max_body_chars`.
+**Retorna:** visão de detalhe em Markdown com o trecho pedido e os metadados.
+
+**Artigo longo vem em trechos.** O manual de *Tipos de Operação* tem ~255 mil
+caracteres e o teto por resposta é de 40 mil: sem `body_offset`, tudo depois do
+primeiro trecho ficava inalcançável — o índice mostrava a aba Estoque e o texto
+dela ficava além do corte, sem caminho até ele.
+
+Quando há continuação, a resposta informa o intervalo lido e o `body_offset` do
+trecho seguinte:
+
+```
+_... (trecho de 0 a 40000 de 255431 chars, 40000 por resposta.
+Para continuar, chame de novo com body_offset=40000)_
+```
 
 **Erros:** `NOT_FOUND` quando o ID do artigo não existe; `RESPONSE_TOO_LARGE` quando o corpo excede 400 KB.
 

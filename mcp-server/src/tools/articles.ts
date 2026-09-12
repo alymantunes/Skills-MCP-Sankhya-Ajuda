@@ -29,7 +29,8 @@ const TOOL_DESCRIPTION =
   'hierarquico (categoria > secao > subsecao), corpo limpo (HTML removido), ' +
   'URL original em ajuda.sankhya.com.br, autor, tags, datas e flag de ' +
   'obsolescencia. Use quando ja tiver o article_id retornado por uma busca ' +
-  'no Sankhya. Retorna Markdown formatado, consulta somente leitura.';
+  'no Sankhya. Artigo longo vem em trechos: siga o body_offset indicado ' +
+  'na resposta para ler o resto. Somente leitura.';
 
 const inputSchema = {
   article_id: z
@@ -48,6 +49,18 @@ const inputSchema = {
         'Empirico no banco Sankhya: default 8000 cobre 92% dos artigos completos ' +
         '(P90=7.144 chars), 15000 cobre 96%, 40000 cobre 99% (P99=40.435). ' +
         'Subir so quando o usuario pedir analise profunda.',
+    ),
+  body_offset: z
+    .number()
+    .int()
+    .min(0)
+    .default(0)
+    .describe(
+      'De onde comecar a ler o corpo, em caracteres. Default 0. Serve para ' +
+        'ler artigo grande em trechos: o manual de Tipos de Operacao tem ~255 ' +
+        'mil chars e o teto por resposta e de 40 mil, entao sem isto tudo ' +
+        'depois do primeiro trecho fica inalcancavel. A resposta informa o ' +
+        'offset do proximo trecho quando houver.',
     ),
 };
 
@@ -71,7 +84,15 @@ export function registerArticleTool(server: McpServer, ctx: ToolContext): void {
         const maxBodyChars =
           typeof rawArgs.max_body_chars === 'number' ? rawArgs.max_body_chars : 8000;
 
-        const article = await getArticleFull(ctx.pool, articleId, maxBodyChars);
+        const bodyOffset =
+          typeof rawArgs.body_offset === 'number' ? rawArgs.body_offset : 0;
+
+        const article = await getArticleFull(
+          ctx.pool,
+          articleId,
+          maxBodyChars,
+          bodyOffset,
+        );
         if (!article) {
           return errorNotFound(
             'Artigo',

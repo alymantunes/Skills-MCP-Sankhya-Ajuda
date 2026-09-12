@@ -14,6 +14,15 @@ Formato: [Keep a Changelog](https://keepachangelog.com/) · Versionamento: [Sema
 
 ## [Unreleased]
 
+### Added
+
+- **`body_offset` em `sankhya_ajuda_get_article_details`.** Artigo maior que o
+  teto por resposta passa a ser legível em trechos: a resposta informa o
+  intervalo lido e o offset do próximo, e o agente continua sozinho. O manual de
+  *Tipos de Operação* tem ~255 mil caracteres contra um teto de 40 mil — a aba
+  Estoque dele era inalcançável, e a orientação anterior ("aumente
+  `max_body_chars`") não resolvia, só empurrava o corte.
+
 > **Nota de versão (pendente de decisão):** os números de versão estão divergentes entre si
 > e precisam de alinhamento pelo dono do código da Fase 2 — `README.md` indica `1.5.6`,
 > `mcp-server/src/version.ts` (`SERVER_VERSION`) indica `1.0.0` e `mcp-server/package.json`

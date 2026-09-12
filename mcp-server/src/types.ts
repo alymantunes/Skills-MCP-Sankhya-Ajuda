@@ -38,6 +38,10 @@ export interface ArticleFull {
   body_text: string;
   body_text_truncated: boolean;
   body_text_full_chars: number;
+  /** Onde este trecho comeca no corpo completo, em chars. */
+  body_text_offset: number;
+  /** Onde o proximo trecho comeca; null quando o artigo acabou. */
+  body_text_next_offset: number | null;
   html_url: string;
   label_names: string[];
   outdated: boolean;

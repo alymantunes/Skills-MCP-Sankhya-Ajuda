@@ -171,6 +171,91 @@ describe('getArticleFull — truncation logic', () => {
     expect(out?.body_text.length).toBe(100);
     expect(out?.body_text_truncated).toBe(true);
     expect(out?.body_text_full_chars).toBe(500);
+    expect(out?.body_text_offset).toBe(0);
+    expect(out?.body_text_next_offset).toBe(100);
+  });
+
+  // Paginacao. Sem ela, tudo depois do primeiro trecho era inalcancavel: o
+  // manual de Tipos de Operacao tem ~255 mil chars e o teto por resposta e de
+  // 40 mil, e a aba Estoque -- que era o que o especialista Fiscal precisava
+  // -- ficava alem do corte, sem nenhum caminho ate ela.
+  it('le o trecho seguinte a partir de body_offset', async () => {
+    const corpo = 'a'.repeat(100) + 'b'.repeat(100) + 'c'.repeat(50);
+    const { pool } = makePool([
+      {
+        id: 1,
+        section_id: 10,
+        title: 'X',
+        breadcrumb: null,
+        body_text: corpo,
+        html_url: 'https://example/1',
+        label_names: null,
+        outdated: false,
+        author_id: null,
+        created_at: null,
+        updated_at: null,
+        edited_at: null,
+        synced_at: new Date('2026-05-15T03:00:00Z'),
+      },
+    ]);
+
+    const segundo = await getArticleFull(pool, 1, 100, 100);
+    expect(segundo?.body_text).toBe('b'.repeat(100));
+    expect(segundo?.body_text_offset).toBe(100);
+    expect(segundo?.body_text_next_offset).toBe(200);
+    expect(segundo?.body_text_truncated).toBe(true);
+  });
+
+  it('o ultimo trecho nao promete continuacao', async () => {
+    const { pool } = makePool([
+      {
+        id: 1,
+        section_id: 10,
+        title: 'X',
+        breadcrumb: null,
+        body_text: 'a'.repeat(150),
+        html_url: 'https://example/1',
+        label_names: null,
+        outdated: false,
+        author_id: null,
+        created_at: null,
+        updated_at: null,
+        edited_at: null,
+        synced_at: new Date('2026-05-15T03:00:00Z'),
+      },
+    ]);
+
+    const ultimo = await getArticleFull(pool, 1, 100, 100);
+    expect(ultimo?.body_text.length).toBe(50);
+    expect(ultimo?.body_text_truncated).toBe(false);
+    expect(ultimo?.body_text_next_offset).toBeNull();
+  });
+
+  it('offset alem do fim devolve vazio em vez de estourar', async () => {
+    // O agente pode errar a conta, e um artigo re-sincronizado encolhe entre
+    // uma chamada e a seguinte. Erro aqui derrubaria a consulta inteira.
+    const { pool } = makePool([
+      {
+        id: 1,
+        section_id: 10,
+        title: 'X',
+        breadcrumb: null,
+        body_text: 'a'.repeat(50),
+        html_url: 'https://example/1',
+        label_names: null,
+        outdated: false,
+        author_id: null,
+        created_at: null,
+        updated_at: null,
+        edited_at: null,
+        synced_at: new Date('2026-05-15T03:00:00Z'),
+      },
+    ]);
+
+    const fora = await getArticleFull(pool, 1, 100, 9999);
+    expect(fora?.body_text).toBe('');
+    expect(fora?.body_text_truncated).toBe(false);
+    expect(fora?.body_text_next_offset).toBeNull();
   });
 
   it('handles huge articles up to the new 40000 cap (P99 outlier coverage)', async () => {
